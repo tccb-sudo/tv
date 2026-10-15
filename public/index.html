@@ -622,7 +622,7 @@
 
     <footer>
       <p><b>PHIẾU TỰ ĐÁNH GIÁ HIỆU QUẢ CÔNG VIỆC TRỰC TUYẾN</b></p>
-      <p>© 2026 Phòng Tổ chức cán bộ</p>
+      <p>© 2026 Phòng Tổ chức cán bộ · <span style="opacity:.6;">phiên bản 2026.10.15</span></p>
     </footer>
   </div>
 </div>
@@ -671,6 +671,21 @@ const PAGE_LABELS = {
   'page-hr-detail':    { title:'Chi tiết đơn vị', sub:'Danh sách VC-NLĐ theo đơn vị' }
 };
 
+const APP_VERSION = '2026.10.15';
+window.addEventListener('error', ev => showErrBanner(ev.message));
+window.addEventListener('unhandledrejection', ev => showErrBanner(ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason)));
+function showErrBanner(msg) {
+  if (!msg) return;
+  let b = document.getElementById('err-banner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'err-banner';
+    b.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:100000;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:10px;padding:10px 14px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.15);';
+    b.onclick = () => b.remove();
+    document.body.appendChild(b);
+  }
+  b.textContent = '⚠️ Lỗi trang (v' + APP_VERSION + '): ' + msg + ' — bấm để ẩn. Hãy tải lại trang (Ctrl+F5); nếu lặp lại, chụp màn hình gửi Phòng TCCB.';
+}
 const state = { token:null, user:null, pendingMsnv:null, hrMonth:'', mgrMonth:'' };
 const reqSeq = {};   // chống kết quả trả về lộn thứ tự khi đổi tháng liên tục
 
@@ -911,7 +926,7 @@ async function handleVerify(ev) {
 }
 
 function handleLoginResult(res) {
-  if (res.otpRequired) showOtpModal(res);
+  if (res && res.otpRequired) showOtpModal(res);
   else finishLogin(res);
 }
 
@@ -1027,7 +1042,8 @@ async function submitOtp() {
   try {
     const res = await api('verifyOtp', { otpId: otp.id, code, device: await getDeviceInfo() });
     closeOtpModal();
-    finishLogin(res);
+    try { finishLogin(res); }
+    catch (e2) { alert('⚠️ ' + e2.message); logout(); }
   } catch (e) {
     if (e.code === 'OTP_EXPIRED') { closeOtpModal(); alert('⚠️ ' + e.message); }
     else { setStatus(st, 'done', esc(e.message)); input.value = ''; input.focus(); }
@@ -1111,13 +1127,26 @@ function saveSession(res) {
 }
 
 function finishLogin(res) {
+  if (!res || !res.token || !res.user || typeof res.user.hoTen !== 'string')
+    throw new Error('Máy chủ trả về dữ liệu đăng nhập không đầy đủ. Vui lòng tải lại trang (Ctrl+F5) và đăng nhập lại.');
   saveSession(res);
   document.getElementById('cccd_input').value = '';
   enterApp();
 }
 
 function enterApp() {
+  try { enterAppInner(); }
+  catch (e) {
+    console.error(e);
+    alert('⚠️ Không vào được hệ thống: ' + (e && e.message ? e.message : e) +
+          '\n\nVui lòng tải lại trang (Ctrl+F5) rồi đăng nhập lại. Nếu vẫn lỗi, chụp màn hình thông báo này gửi Phòng TCCB.');
+    logout();
+  }
+}
+
+function enterAppInner() {
   const u = state.user;
+  if (!u || typeof u.hoTen !== 'string') throw new Error('Phiên đăng nhập không hợp lệ');
   document.getElementById('login-page').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
   const last = (u.hoTen || '?').trim().split(/\s+/).pop();
